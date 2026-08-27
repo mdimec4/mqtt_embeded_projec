@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+from urllib.error import HTTPError, URLError
 from email.message import EmailMessage
 from pathlib import Path
 from threading import Thread
@@ -62,6 +63,16 @@ def github_json(url):
     request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "mqtt-embedded-subscriber"})
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.load(response)
+
+
+def check_github(repository):
+    try:
+        return github_json(f"https://api.github.com/repos/{repository}/releases/latest")
+    except HTTPError as error:
+        if error.code == 404:
+            LOGGER.info("No GitHub release is available for %s", repository)
+            return None
+        raise
 
 
 def download(url, destination):
@@ -113,7 +124,9 @@ def stage_update(version, archive):
 
 def check_once():
     repository = configured("UPDATE_GITHUB_REPOSITORY", "mdimec4/mqtt_embeded_projec")
-    release = github_json(f"https://api.github.com/repos/{repository}/releases/latest")
+    release = check_github(repository)
+    if release is None:
+        return
     version = release["tag_name"].removeprefix("v")
     if version == current_version():
         return
@@ -141,6 +154,8 @@ def run():
     while True:
         try:
             check_once()
+        except (TimeoutError, URLError, OSError) as error:
+            LOGGER.warning("Automatic update check unavailable: %s", error)
         except Exception:
             LOGGER.exception("Automatic update check failed")
         sleep(interval)

@@ -28,6 +28,9 @@ def main():
         while time.monotonic() < deadline:
             result = process.poll()
             if result is not None:
+                if result == 75 and STATE_FILE.exists() and BACKUP_DIR.exists():
+                    pending = True
+                    break
                 if pending:
                     restore_backup()
                     send_update_email("Subscriber update rolled back", "The updated subscriber failed during startup.")
