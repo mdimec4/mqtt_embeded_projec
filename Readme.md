@@ -242,18 +242,36 @@ Each release must contain these assets:
 
 The archive must contain `subscriber/subscriber.py`, `subscriber/updater.py`, and `subscriber/version.txt`. The release tag must match the version in `version.txt` (for example, tag `v0.2.0` and file content `0.2.0`). The checksum is SHA-256 of the archive. The signature is an Ed25519 signature of the archive, encoded as base64. The public key is stored in `UPDATE_PUBLIC_KEY`, also base64 encoded.
 
-Generate an Ed25519 signing key pair with a trusted key-management process. Never commit the private key. A release can be assembled and signed using the following example with OpenSSL:
+Generate an Ed25519 signing key pair with a trusted key-management process. Run this once from a private directory. Never commit or upload the private key:
+
+```bash
+mkdir -p update-keys
+openssl genpkey -algorithm ED25519 -out update-keys/update-signing.key
+openssl pkey -in update-keys/update-signing.key -pubout -out update-keys/update-signing.pub
+chmod 600 update-keys/update-signing.key
+```
+
+The updater expects the raw 32-byte Ed25519 public key, base64 encoded. Put this value in `UPDATE_PUBLIC_KEY`:
+
+```bash
+openssl pkey -in update-keys/update-signing.key -pubout -outform DER \
+  | tail -c 32 | base64 -w 0
+```
+
+Create and sign a release artifact. The `-rawin` option is required for Ed25519 signatures with OpenSSL 3:
 
 ```bash
 mkdir -p release/subscriber
 cp subscriber/subscriber.py subscriber/updater.py subscriber/version.txt release/subscriber/
 tar -czf subscriber.tar.gz -C release subscriber
 sha256sum subscriber.tar.gz > subscriber.tar.gz.sha256
-openssl pkeyutl -sign -inkey update-signing.key -in subscriber.tar.gz -out subscriber.tar.gz.sig
-base64 -w 0 subscriber.tar.gz.sig > subscriber.tar.gz.sig.b64
+openssl pkeyutl -sign -rawin -inkey update-keys/update-signing.key \
+  -in subscriber.tar.gz -out subscriber.tar.gz.sig.bin
+base64 -w 0 subscriber.tar.gz.sig.bin > subscriber.tar.gz.sig
+rm subscriber.tar.gz.sig.bin
 ```
 
-The updater expects `subscriber.tar.gz.sig` to contain the base64 signature. Convert the generated signature with `mv subscriber.tar.gz.sig.b64 subscriber.tar.gz.sig` before uploading all three assets to a GitHub Release.
+Upload `subscriber.tar.gz`, `subscriber.tar.gz.sha256`, and the base64 text file `subscriber.tar.gz.sig` to a GitHub Release. The release tag must match the version in `subscriber/version.txt`.
 
 Configure the subscriber in `.env_subscriber`:
 
