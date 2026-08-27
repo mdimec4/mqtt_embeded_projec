@@ -1,0 +1,12 @@
+.env*
+*.key
+*.csr
+*.srl
+*.crt
+*.pem
+mosquitto/config/passwd
+mosquitto/data/
+mosquitto/log/
+postgres/certs/
+__pycache__/
+*.py[cod]

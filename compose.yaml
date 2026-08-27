@@ -1,0 +1,62 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  mqtt_meter_publisher:
+    build: ./publisher
+    image: mqtt_meter_publisher:latest
+    container_name: mqtt_meter_publisher
+    depends_on:
+      - mosquitto
+    env_file:
+      - .env_publisher
+    volumes:
+      - ./mosquitto/config/ca.crt:/app/ca.crt:ro
+
+  postgres:
+    build: ./postgres
+    image: mqtt-postgres:latest
+    restart: always
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/etc/postgresql/certs/server.crt
+      - -c
+      - ssl_key_file=/etc/postgresql/certs/server.key
+    env_file:
+      - .env_postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  mqtt_meter_subscriber:
+    build: ./subscriber
+    image: mqtt_meter_subscriber:latest
+    container_name: mqtt_meter_subscriber
+    depends_on:
+      mosquitto:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env_subscriber
+    ports:
+      - "5000:5000"    # Flask API
+    volumes:
+      - ./mosquitto/config/ca.crt:/app/ca.crt:ro
+      - ./postgres/certs/ca.crt:/app/postgres-ca.crt:ro
+
+  
