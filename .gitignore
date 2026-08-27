@@ -10,3 +10,5 @@ mosquitto/log/
 postgres/certs/
 __pycache__/
 *.py[cod]
+.update-state.json
+.update-backup/

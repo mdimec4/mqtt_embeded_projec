@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 import psycopg2
 from flask import Flask, jsonify, request
+from updater import start as start_updater
 
 
 # Configuration is loaded once at process start.
@@ -131,5 +132,6 @@ def mqtt_loop():
 
 if __name__ == "__main__":
 	initialize_database()
+	start_updater()
 	threading.Thread(target=mqtt_loop, daemon=True).start()
 	app.run(host=WEB_HOST, port=WEB_PORT)

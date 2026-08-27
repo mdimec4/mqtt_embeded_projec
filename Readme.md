@@ -229,3 +229,48 @@ To remove local PostgreSQL data as well, remove the generated data directory use
 - The example passwords are placeholders and must be replaced.
 - For production, use a managed secret store and a CA managed for the deployment environment.
 - The Flask development server is suitable for local testing only; use a production WSGI server for deployment.
+
+## Automatic subscriber updates
+
+The subscriber includes an opt-in updater. It is disabled by default because the repository currently has no GitHub Releases. Enable it only after publishing signed release assets.
+
+Each release must contain these assets:
+
+- `subscriber.tar.gz`
+- `subscriber.tar.gz.sha256`
+- `subscriber.tar.gz.sig`
+
+The archive must contain `subscriber/subscriber.py`, `subscriber/updater.py`, and `subscriber/version.txt`. The release tag must match the version in `version.txt` (for example, tag `v0.2.0` and file content `0.2.0`). The checksum is SHA-256 of the archive. The signature is an Ed25519 signature of the archive, encoded as base64. The public key is stored in `UPDATE_PUBLIC_KEY`, also base64 encoded.
+
+Generate an Ed25519 signing key pair with a trusted key-management process. Never commit the private key. A release can be assembled and signed using the following example with OpenSSL:
+
+```bash
+mkdir -p release/subscriber
+cp subscriber/subscriber.py subscriber/updater.py subscriber/version.txt release/subscriber/
+tar -czf subscriber.tar.gz -C release subscriber
+sha256sum subscriber.tar.gz > subscriber.tar.gz.sha256
+openssl pkeyutl -sign -inkey update-signing.key -in subscriber.tar.gz -out subscriber.tar.gz.sig
+base64 -w 0 subscriber.tar.gz.sig > subscriber.tar.gz.sig.b64
+```
+
+The updater expects `subscriber.tar.gz.sig` to contain the base64 signature. Convert the generated signature with `mv subscriber.tar.gz.sig.b64 subscriber.tar.gz.sig` before uploading all three assets to a GitHub Release.
+
+Configure the subscriber in `.env_subscriber`:
+
+```text
+UPDATE_ENABLED=true
+UPDATE_GITHUB_REPOSITORY=mdimec4/mqtt_embeded_projec
+UPDATE_INTERVAL_SECONDS=3600
+UPDATE_STARTUP_TIMEOUT_SECONDS=20
+UPDATE_PUBLIC_KEY=base64-encoded-ed25519-public-key
+UPDATE_SMTP_HOST=smtp.example.com
+UPDATE_SMTP_PORT=587
+UPDATE_SMTP_USERNAME=smtp-user
+UPDATE_SMTP_PASSWORD=smtp-password
+UPDATE_EMAIL_FROM=from@example.com
+UPDATE_EMAIL_TO=to@example.com
+```
+
+The subscriber checks the latest release at the configured interval. It downloads the archive, checksum, and signature over HTTPS, verifies both checksum and Ed25519 signature, compiles the candidate code, backs up the running version, and restarts. The launcher confirms startup before deleting the backup. If startup fails, it restores the previous version and sends a rollback email. Email notifications are skipped when `UPDATE_SMTP_HOST` or `UPDATE_EMAIL_TO` is not configured.
+
+The updater changes subscriber application files only. It does not replace `.env` files, certificates, PostgreSQL data, Mosquitto configuration, or Docker images.
